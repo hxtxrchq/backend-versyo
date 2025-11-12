@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model carrito {
+  id             Int            @id @default(autoincrement())
+  usuario_id     Int?
+  estado         String?        @default("activo") @db.VarChar(30)
+  creado_en      DateTime?      @default(now()) @db.Timestamptz(6)
+  actualizado_en DateTime?      @default(now()) @db.Timestamptz(6)
+  usuario        usuario?       @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  item_carrito   item_carrito[]
+}
+
+model categoria {
+  id            Int        @id @default(autoincrement())
+  nombre        String     @db.VarChar(100)
+  identificador String     @unique @db.VarChar(100)
+  descripcion   String?
+  producto      producto[]
+}
+
+model cupon {
+  id               Int       @id @default(autoincrement())
+  codigo           String    @unique @db.VarChar(50)
+  tipo             String    @db.VarChar(20)
+  valor            Decimal   @db.Decimal(12, 2)
+  fecha_expiracion DateTime? @db.Date
+  uso_maximo       Int?      @default(1)
+  activo           Boolean?  @default(true)
+  pedido           pedido[]
+}
+
+model item_carrito {
+  id              Int       @id @default(autoincrement())
+  carrito_id      Int?
+  producto_id     Int?
+  cantidad        Int       @default(1)
+  precio_unitario Decimal   @db.Decimal(12, 2)
+  carrito         carrito?  @relation(fields: [carrito_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  producto        producto? @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model item_pedido {
+  id              Int       @id @default(autoincrement())
+  pedido_id       Int?
+  producto_id     Int?
+  cantidad        Int
+  precio_unitario Decimal   @db.Decimal(12, 2)
+  pedido          pedido?   @relation(fields: [pedido_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  producto        producto? @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model pago_simulado {
+  id          Int       @id @default(autoincrement())
+  pedido_id   Int?
+  metodo      String?   @db.VarChar(50)
+  estado_pago String?   @db.VarChar(30)
+  referencia  String?   @db.VarChar(200)
+  creado_en   DateTime? @default(now()) @db.Timestamptz(6)
+  pedido      pedido?   @relation(fields: [pedido_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model pedido {
+  id                      Int             @id @default(autoincrement())
+  usuario_id              Int?
+  total                   Decimal         @db.Decimal(12, 2)
+  estado                  String?         @default("pendiente") @db.VarChar(30)
+  nombre_receptor         String?         @db.VarChar(150)
+  direccion_envio         String?         @db.VarChar(255)
+  ciudad                  String?         @db.VarChar(100)
+  region                  String?         @db.VarChar(100)
+  pais                    String?         @db.VarChar(100)
+  telefono_contacto       String?         @db.VarChar(50)
+  codigo_tracking         String?         @db.VarChar(100)
+  agencia_envio           String?         @db.VarChar(100)
+  tiempo_estimado_entrega String?         @db.VarChar(100)
+  cupon_id                Int?
+  creado_en               DateTime?       @default(now()) @db.Timestamptz(6)
+  item_pedido             item_pedido[]
+  pago_simulado           pago_simulado[]
+  cupon                   cupon?          @relation(fields: [cupon_id], references: [id], onUpdate: NoAction)
+  usuario                 usuario?        @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model producto {
+  id           Int            @id @default(autoincrement())
+  nombre       String         @db.VarChar(200)
+  descripcion  String?
+  precio       Decimal        @default(0) @db.Decimal(12, 2)
+  stock        Int            @default(0)
+  tallas       Json?
+  colores      Json?
+  imagenes     Json?
+  categoria_id Int?
+  temporada_id Int?
+  slug         String?        @unique @db.VarChar(200)
+  creado_en    DateTime?      @default(now()) @db.Timestamptz(6)
+  item_carrito item_carrito[]
+  item_pedido  item_pedido[]
+  categoria    categoria?     @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
+  temporada    temporada?     @relation(fields: [temporada_id], references: [id], onUpdate: NoAction)
+  wishlist     wishlist[]
+}
+
+model temporada {
+  id          Int        @id @default(autoincrement())
+  nombre      String     @unique @db.VarChar(150)
+  descripcion String?
+  activo      Boolean?   @default(true)
+  inicio      DateTime?  @db.Date
+  fin         DateTime?  @db.Date
+  producto    producto[]
+}
+
+model usuario {
+  id         Int        @id @default(autoincrement())
+  nombre     String     @db.VarChar(150)
+  email      String     @unique @db.VarChar(200)
+  contrasena String     @db.VarChar(255)
+  rol        String     @default("cliente") @db.VarChar(20)
+  telefono   String?    @db.VarChar(50)
+  creado_en  DateTime?  @default(now()) @db.Timestamptz(6)
+  carrito    carrito[]
+  pedido     pedido[]
+  wishlist   wishlist[]
+}
+
+model wishlist {
+  id          Int       @id @default(autoincrement())
+  usuario_id  Int?
+  producto_id Int?
+  creado_en   DateTime? @default(now()) @db.Timestamptz(6)
+  producto    producto? @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usuario     usuario?  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([usuario_id, producto_id])
+}
