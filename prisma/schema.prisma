@@ -15,6 +15,9 @@ model carrito {
   actualizado_en DateTime?      @default(now()) @db.Timestamptz(6)
   usuario        usuario?       @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   item_carrito   item_carrito[]
+
+  @@index([usuario_id])
+  @@index([estado])
 }
 
 model categoria {
@@ -28,32 +31,53 @@ model categoria {
 model cupon {
   id               Int       @id @default(autoincrement())
   codigo           String    @unique @db.VarChar(50)
-  tipo             String    @db.VarChar(20)
-  valor            Decimal   @db.Decimal(12, 2)
-  fecha_expiracion DateTime? @db.Date
-  uso_maximo       Int?      @default(1)
-  activo           Boolean?  @default(true)
+  tipo_descuento   String    @db.VarChar(20)
+  valor_descuento  Decimal   @db.Decimal(12, 2)
+  monto_minimo     Decimal?  @db.Decimal(12, 2)
+  descuento_maximo Decimal?  @db.Decimal(12, 2)
+  usos_maximos     Int?      @default(1)
+  usos_actuales    Int       @default(0)
+  fecha_inicio     DateTime? @db.Timestamptz(6)
+  fecha_fin        DateTime? @db.Timestamptz(6)
+  activo           Boolean   @default(true)
+  creado_en        DateTime  @default(now()) @db.Timestamptz(6)
   pedido           pedido[]
+
+  @@index([codigo])
+  @@index([activo])
+  @@index([fecha_fin])
 }
 
 model item_carrito {
-  id              Int       @id @default(autoincrement())
+  id              Int                @id @default(autoincrement())
   carrito_id      Int?
   producto_id     Int?
-  cantidad        Int       @default(1)
-  precio_unitario Decimal   @db.Decimal(12, 2)
-  carrito         carrito?  @relation(fields: [carrito_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  producto        producto? @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cantidad        Int                @default(1)
+  precio_unitario Decimal            @db.Decimal(12, 2)
+  variacion_id    Int
+  variacion       variacion_producto @relation(fields: [variacion_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_item_carrito_variacion")
+  carrito         carrito?           @relation(fields: [carrito_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  producto        producto?          @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([carrito_id])
+  @@index([producto_id])
+  @@index([variacion_id])
 }
 
 model item_pedido {
-  id              Int       @id @default(autoincrement())
+  id              Int                @id @default(autoincrement())
   pedido_id       Int?
   producto_id     Int?
   cantidad        Int
-  precio_unitario Decimal   @db.Decimal(12, 2)
-  pedido          pedido?   @relation(fields: [pedido_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  producto        producto? @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  precio_unitario Decimal            @db.Decimal(12, 2)
+  variacion_id    Int
+  variacion       variacion_producto @relation(fields: [variacion_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_item_pedido_variacion")
+  pedido          pedido?            @relation(fields: [pedido_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  producto        producto?          @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([pedido_id])
+  @@index([producto_id])
+  @@index([variacion_id])
 }
 
 model pago_simulado {
@@ -86,26 +110,48 @@ model pedido {
   pago_simulado           pago_simulado[]
   cupon                   cupon?          @relation(fields: [cupon_id], references: [id], onUpdate: NoAction)
   usuario                 usuario?        @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([usuario_id])
+  @@index([estado])
+  @@index([creado_en])
+  @@index([cupon_id])
 }
 
 model producto {
-  id           Int            @id @default(autoincrement())
-  nombre       String         @db.VarChar(200)
+  id           Int                  @id @default(autoincrement())
+  nombre       String               @db.VarChar(200)
   descripcion  String?
-  precio       Decimal        @default(0) @db.Decimal(12, 2)
-  stock        Int            @default(0)
-  tallas       Json?
-  colores      Json?
+  precio       Decimal              @default(0) @db.Decimal(12, 2)
   imagenes     Json?
   categoria_id Int?
   temporada_id Int?
-  slug         String?        @unique @db.VarChar(200)
-  creado_en    DateTime?      @default(now()) @db.Timestamptz(6)
+  slug         String?              @unique @db.VarChar(200)
+  creado_en    DateTime?            @default(now()) @db.Timestamptz(6)
   item_carrito item_carrito[]
   item_pedido  item_pedido[]
-  categoria    categoria?     @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
-  temporada    temporada?     @relation(fields: [temporada_id], references: [id], onUpdate: NoAction)
+  categoria    categoria?           @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
+  temporada    temporada?           @relation(fields: [temporada_id], references: [id], onUpdate: NoAction)
+  variaciones  variacion_producto[]
   wishlist     wishlist[]
+
+  @@index([categoria_id])
+  @@index([temporada_id])
+  @@index([creado_en])
+}
+
+model variacion_producto {
+  id           Int            @id @default(autoincrement())
+  producto_id  Int
+  talla        String?
+  color        String?
+  stock        Int?           @default(0)
+  sku          String?
+  item_carrito item_carrito[]
+  item_pedido  item_pedido[]
+  producto     producto       @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([producto_id])
+  @@index([sku])
 }
 
 model temporada {
@@ -119,16 +165,26 @@ model temporada {
 }
 
 model usuario {
-  id         Int        @id @default(autoincrement())
-  nombre     String     @db.VarChar(150)
-  email      String     @unique @db.VarChar(200)
-  contrasena String     @db.VarChar(255)
-  rol        String     @default("cliente") @db.VarChar(20)
-  telefono   String?    @db.VarChar(50)
-  creado_en  DateTime?  @default(now()) @db.Timestamptz(6)
-  carrito    carrito[]
-  pedido     pedido[]
-  wishlist   wishlist[]
+  id                        Int                         @id @default(autoincrement())
+  nombre                    String                      @db.VarChar(150)
+  email                     String                      @unique @db.VarChar(200)
+  contrasena                String                      @db.VarChar(255)
+  dni                       String?                     @unique @db.VarChar(20)
+  direccion                 String?                     @db.VarChar(255)
+  email_verificado          Boolean                     @default(false)
+  rol                       String                      @default("cliente") @db.VarChar(20)
+  telefono                  String?                     @db.VarChar(50)
+  creado_en                 DateTime                    @default(now()) @db.Timestamptz(6)
+  carrito                   carrito[]
+  pedido                    pedido[]
+  wishlist                  wishlist[]
+  email_verification_tokens email_verification_token[]
+  password_reset_tokens     password_reset_token[]
+  refresh_tokens            refresh_token[]
+
+  @@index([email])
+  @@index([dni])
+  @@index([rol])
 }
 
 model wishlist {
@@ -140,4 +196,45 @@ model wishlist {
   usuario     usuario?  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([usuario_id, producto_id])
+  @@index([usuario_id])
+  @@index([producto_id])
+}
+
+model email_verification_token {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  token      String   @unique @db.VarChar(255)
+  expira_en  DateTime @db.Timestamptz(6)
+  creado_en  DateTime @default(now()) @db.Timestamptz(6)
+  usuario    usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([token])
+  @@index([usuario_id])
+}
+
+model password_reset_token {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  token      String   @unique @db.VarChar(255)
+  expira_en  DateTime @db.Timestamptz(6)
+  usado      Boolean  @default(false)
+  creado_en  DateTime @default(now()) @db.Timestamptz(6)
+  usuario    usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([token])
+  @@index([usuario_id])
+}
+
+model refresh_token {
+  id         Int      @id @default(autoincrement())
+  usuario_id Int
+  token      String   @unique @db.VarChar(500)
+  expira_en  DateTime @db.Timestamptz(6)
+  revocado   Boolean  @default(false)
+  creado_en  DateTime @default(now()) @db.Timestamptz(6)
+  usuario    usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([token])
+  @@index([usuario_id])
+  @@index([expira_en])
 }
