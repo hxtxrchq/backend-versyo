@@ -339,14 +339,18 @@ export class ProductoService {
       nombre,
       descripcion,
       precio,
+      precio_oferta,
+      sku,
       imagenes,
       slug,
+      genero,
       creado_en,
       categoria,
       temporada,
       variaciones,
       activo,
       recomendado,
+      nuevo,
     } = producto;
 
     // Calcular stock_total sumando el stock de todas las variaciones
@@ -363,11 +367,15 @@ export class ProductoService {
 
     // Solo incluir campos opcionales si tienen valor
     if (descripcion) productoTransformado.descripcion = descripcion;
+    if (precio_oferta) productoTransformado.precio_oferta = Number(precio_oferta);
+    if (sku) productoTransformado.sku = sku;
     if (imagenes) productoTransformado.imagenes = imagenes;
     if (slug) productoTransformado.slug = slug;
+    if (genero) productoTransformado.genero = genero;
     if (creado_en) productoTransformado.creado_en = creado_en;
     if (activo !== undefined) productoTransformado.activo = activo;
     if (recomendado !== undefined) productoTransformado.recomendado = recomendado;
+    if (nuevo !== undefined) productoTransformado.nuevo = nuevo;
 
     // Incluir relaciones
     if (categoria) productoTransformado.categoria = categoria;
