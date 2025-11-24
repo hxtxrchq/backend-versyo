@@ -29,7 +29,7 @@ export class AuthService {
     const existe = await this.prisma.usuario.findUnique({
       where: { email: data.email },
     });
-    if (existe) throw new UnauthorizedException('El email ya está registrado');
+    if (existe) throw new BadRequestException('Este correo electrónico ya está registrado. Por favor, inicia sesión.');
 
     const hashed = await bcrypt.hash(data.contrasena, 10);
 
@@ -95,10 +95,10 @@ export class AuthService {
       where: { email: data.email },
     });
 
-    if (!usuario) throw new UnauthorizedException('Credenciales inválidas');
+    if (!usuario) throw new UnauthorizedException('El correo electrónico no está registrado');
 
     const valid = await bcrypt.compare(data.contrasena, usuario.contrasena);
-    if (!valid) throw new UnauthorizedException('Credenciales inválidas');
+    if (!valid) throw new UnauthorizedException('Contraseña incorrecta');
 
     // Generar access token y refresh token
     const payload = {

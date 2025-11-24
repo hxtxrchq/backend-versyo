@@ -41,6 +41,18 @@ export class CrearProductoDto {
   genero?: string; // hombre, mujer, ambos
 
   @IsOptional()
+  @IsNumber()
+  precio_oferta?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  activo?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  recomendado?: boolean;
+
+  @IsOptional()
   @IsBoolean()
   tiene_variaciones?: boolean;
 

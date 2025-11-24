@@ -123,30 +123,31 @@ model pedido {
 }
 
 model producto {
-  id           Int                  @id @default(autoincrement())
-  nombre       String               @db.VarChar(200)
-  descripcion  String?
-  precio       Decimal              @default(0) @db.Decimal(12, 2)
-  imagenes     Json?
-  categoria_id Int?
-  temporada_id Int?
-  genero       String?              @default("ambos") @db.VarChar(20)
-  slug         String?              @unique @db.VarChar(200)
-  activo       Boolean              @default(true)
-  destacado    Boolean              @default(false)
-  creado_en    DateTime?            @default(now()) @db.Timestamptz(6)
-  item_carrito item_carrito[]
-  item_pedido  item_pedido[]
-  categoria    categoria?           @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
-  temporada    temporada?           @relation(fields: [temporada_id], references: [id], onUpdate: NoAction)
-  variaciones  variacion_producto[]
-  wishlist     wishlist[]
+  id            Int                  @id @default(autoincrement())
+  nombre        String               @db.VarChar(200)
+  descripcion   String?
+  precio        Decimal              @default(0) @db.Decimal(12, 2)
+  precio_oferta Decimal?             @db.Decimal(12, 2)
+  imagenes      Json?
+  categoria_id  Int?
+  temporada_id  Int?
+  genero        String?              @default("ambos") @db.VarChar(20)
+  slug          String?              @unique @db.VarChar(200)
+  activo        Boolean              @default(true)
+  recomendado   Boolean              @default(false)
+  creado_en     DateTime?            @default(now()) @db.Timestamptz(6)
+  item_carrito  item_carrito[]
+  item_pedido   item_pedido[]
+  categoria     categoria?           @relation(fields: [categoria_id], references: [id], onUpdate: NoAction)
+  temporada     temporada?           @relation(fields: [temporada_id], references: [id], onUpdate: NoAction)
+  variaciones   variacion_producto[]
+  wishlist      wishlist[]
 
   @@index([categoria_id])
   @@index([temporada_id])
   @@index([genero])
   @@index([activo])
-  @@index([destacado])
+  @@index([recomendado])
   @@index([creado_en])
 }
 
