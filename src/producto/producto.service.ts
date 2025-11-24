@@ -346,7 +346,7 @@ export class ProductoService {
       temporada,
       variaciones,
       activo,
-      destacado,
+      recomendado,
     } = producto;
 
     // Calcular stock_total sumando el stock de todas las variaciones
@@ -367,7 +367,7 @@ export class ProductoService {
     if (slug) productoTransformado.slug = slug;
     if (creado_en) productoTransformado.creado_en = creado_en;
     if (activo !== undefined) productoTransformado.activo = activo;
-    if (destacado !== undefined) productoTransformado.destacado = destacado;
+    if (recomendado !== undefined) productoTransformado.recomendado = recomendado;
 
     // Incluir relaciones
     if (categoria) productoTransformado.categoria = categoria;
@@ -396,7 +396,7 @@ export class ProductoService {
     const productos = await this.prisma.producto.findMany({
       where: {
         activo: true,
-        destacado: true,
+        recomendado: true,
       },
       take: limite,
       orderBy: { creado_en: 'desc' },
@@ -434,7 +434,7 @@ export class ProductoService {
     return this.transformarProducto(productoActualizado);
   }
 
-  async actualizarDestacado(id: number, destacado: boolean) {
+  async actualizarDestacado(id: number, recomendado: boolean) {
     const producto = await this.prisma.producto.findUnique({
       where: { id },
     });
@@ -445,7 +445,7 @@ export class ProductoService {
 
     const productoActualizado = await this.prisma.producto.update({
       where: { id },
-      data: { destacado },
+      data: { recomendado },
       include: {
         categoria: true,
         temporada: true,

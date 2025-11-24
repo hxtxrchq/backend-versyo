@@ -18,7 +18,7 @@ export class PublicoService {
     const productos_destacados = await this.prisma.producto.findMany({
       where: {
         activo: true,
-        destacado: true,
+        recomendado: true,
       },
       take: 8,
       orderBy: { creado_en: 'desc' },

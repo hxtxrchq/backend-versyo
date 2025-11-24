@@ -55,7 +55,7 @@ export class ProductoController {
   }
 
   @Roles('admin', 'cliente')
-  @Get('destacados/list')
+  @Get('recomendado/list')
   listarDestacados(
     @Query('limite', new ParseIntPipe({ optional: true })) limite?: number,
   ) {
@@ -84,12 +84,12 @@ export class ProductoController {
   }
 
   @Roles('admin')
-  @Patch(':id/destacado')
+  @Patch(':id/recomendado')
   actualizarDestacado(
     @Param('id') id: string,
-    @Body('destacado') destacado: boolean,
+    @Body('recomendado') recomendado: boolean,
   ) {
-    return this.productoService.actualizarDestacado(Number(id), destacado);
+    return this.productoService.actualizarDestacado(Number(id), recomendado);
   }
 
   @Roles('admin')
