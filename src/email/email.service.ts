@@ -9,23 +9,43 @@ export class EmailService {
   private transporter: Transporter;
   private readonly logger = new Logger(EmailService.name);
   private readonly fromEmail = process.env.GMAIL_USER || 'versyostore@gmail.com';
+  private readonly isConfigured: boolean;
 
   constructor() {
     const gmailUser = process.env.GMAIL_USER;
     const gmailPassword = process.env.GMAIL_APP_PASSWORD;
 
-    if (!gmailUser || !gmailPassword) {
-      this.logger.warn('GMAIL_USER o GMAIL_APP_PASSWORD no configurados en variables de entorno');
-    }
+    this.isConfigured = !!(gmailUser && gmailPassword);
 
-    // Configurar transportador de Gmail
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: gmailUser,
-        pass: gmailPassword,
-      },
-    });
+    if (!this.isConfigured) {
+      this.logger.warn('⚠️ GMAIL_USER o GMAIL_APP_PASSWORD no configurados. Los emails no se enviarán (modo desarrollo).');
+      // Crear un transporter "dummy" que no falla pero tampoco envía
+      this.transporter = nodemailer.createTransport({
+        streamTransport: true,
+        newline: 'unix',
+      });
+    } else {
+      // Configurar transportador de Gmail
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: gmailUser,
+          pass: gmailPassword,
+        },
+      });
+      this.logger.log('✅ Email service configurado correctamente');
+    }
+  }
+
+  /**
+   * Verificar si el servicio de email está configurado
+   */
+  private checkEmailConfig(metodo: string): boolean {
+    if (!this.isConfigured) {
+      this.logger.warn(`[${metodo}] Email no configurado - operación omitida`);
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -175,6 +195,11 @@ export class EmailService {
     nombreCliente: string,
     numeroPedido: string,
   ): Promise<void> {
+    if (!this.checkEmailConfig('enviarConfirmacionPedido')) {
+      this.logger.log(`📧 [DEV] Confirmación de pedido omitida para ${emailDestino}`);
+      return;
+    }
+
     try {
       const logoPath = this.getLogoPath();
       const pedidosUrl = process.env.FRONTEND_PEDIDOS_URL || `${process.env.FRONTEND_URL}/mis-pedidos`;
@@ -291,6 +316,11 @@ export class EmailService {
     nombreUsuario: string,
     tokenVerificacion: string,
   ): Promise<void> {
+    if (!this.checkEmailConfig('enviarVerificacionEmail')) {
+      this.logger.log(`📧 [DEV] Verificación de email omitida para ${emailDestino}`);
+      return;
+    }
+
     const urlVerificacion = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/verify-email/${tokenVerificacion}`;
     const logoPath = this.getLogoPath();
 
@@ -350,6 +380,11 @@ export class EmailService {
     nombreUsuario: string,
     tokenRecuperacion: string,
   ): Promise<void> {
+    if (!this.checkEmailConfig('enviarRecuperacionContrasena')) {
+      this.logger.log(`📧 [DEV] Recuperación de contraseña omitida para ${emailDestino}`);
+      return;
+    }
+
     const urlRecuperacion = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/auth/reset-password/${tokenRecuperacion}`;
     const logoPath = this.getLogoPath();
 
@@ -437,6 +472,12 @@ export class EmailService {
       </p>
     `;
 
+    // Si no hay configuración de email, solo loguear y retornar
+    if (!this.checkEmailConfig('enviarCodigoVerificacion')) {
+      this.logger.log(`📧 [DEV] Código de verificación para ${emailDestino}: ${codigo}`);
+      return;
+    }
+
     try {
       const mailOptions = {
         from: `Versyo Store <${this.fromEmail}>`,
@@ -456,7 +497,8 @@ export class EmailService {
       this.logger.log(`Código de verificación enviado a ${emailDestino}`);
     } catch (error) {
       this.logger.error(`Error al enviar código de verificación: ${error.message}`);
-      throw error;
+      // No lanzar error para no bloquear el flujo, solo loguear
+      this.logger.warn(`Email no enviado, pero proceso continúa. Configura GMAIL_USER y GMAIL_APP_PASSWORD para habilitar emails.`);
     }
   }
 
