@@ -17,14 +17,15 @@ import { CuponModule } from './cupon/cupon.module';
 import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
 import { EmailModule } from './email/email.module';
+import { MembresiaModule } from './membresia/membresia.module';
 
 @Module({
   imports: [
-    // Rate limiting: 5 solicitudes por minuto (60000ms)
+    // Rate limiting: 100 solicitudes por minuto (60000ms)
     ThrottlerModule.forRoot([
       {
         ttl: 60000, // 60 segundos
-        limit: 5, // 5 solicitudes
+        limit: 100, // 100 solicitudes por minuto
       },
     ]),
     PrismaModule,
@@ -41,6 +42,7 @@ import { EmailModule } from './email/email.module';
     UploadModule,
     AdminModule,
     EmailModule,
+    MembresiaModule,
   ],
   controllers: [AppController],
   providers: [

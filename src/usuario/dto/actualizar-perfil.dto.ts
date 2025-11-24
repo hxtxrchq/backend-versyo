@@ -5,6 +5,10 @@ export class ActualizarPerfilDto {
   @IsOptional()
   nombre?: string;
 
+  @IsString()
+  @IsOptional()
+  apellido?: string;
+
   @IsEmail()
   @IsOptional()
   email?: string;

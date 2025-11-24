@@ -4,7 +4,11 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateNested,
+  IsBoolean,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { CrearVariacionDto } from './crear-variacion.dto';
 
 export class CrearProductoDto {
   @IsNotEmpty()
@@ -31,4 +35,18 @@ export class CrearProductoDto {
   @IsOptional()
   @IsNumber()
   temporada_id?: number;
+
+  @IsOptional()
+  @IsString()
+  genero?: string; // hombre, mujer, ambos
+
+  @IsOptional()
+  @IsBoolean()
+  tiene_variaciones?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CrearVariacionDto)
+  variaciones?: CrearVariacionDto[];
 }

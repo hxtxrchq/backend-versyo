@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { ActualizarUsuarioDto } from './dto/actualizar-usuario.dto';
 import { ActualizarPerfilDto } from './dto/actualizar-perfil.dto';
@@ -13,7 +14,10 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsuarioService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async crear(data: CrearUsuarioDto) {
     const saltRounds = 10;
@@ -44,6 +48,12 @@ export class UsuarioService {
   }
 
   async actualizar(id: number, data: ActualizarUsuarioDto) {
+    // Obtener el usuario antes de actualizar para comparar tiene_membresia
+    const usuarioAntes = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!usuarioAntes) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
     if (data.contrasena) {
       const saltRounds = 10;
       data.contrasena = await bcrypt.hash(data.contrasena, saltRounds);
@@ -53,6 +63,19 @@ export class UsuarioService {
       where: { id },
       data,
     });
+
+    // Si se activó la membresía VIP (de false/null a true), enviar email
+    if (data.tiene_membresia && !usuarioAntes.tiene_membresia) {
+      try {
+        await this.emailService.enviarConfirmacionMembresia(
+          usuario.email,
+          usuario.nombre || 'Usuario',
+        );
+      } catch (error) {
+        console.error('Error al enviar email de confirmación VIP:', error);
+        // No fallar la actualización si falla el email
+      }
+    }
 
     const { contrasena, ...resto } = usuario;
     return resto;
@@ -71,6 +94,7 @@ export class UsuarioService {
       select: {
         id: true,
         nombre: true,
+        apellido: true,
         email: true,
         telefono: true,
         dni: true,

@@ -107,4 +107,52 @@ export class EmailController {
       message: `Email de bienvenida enviado a ${body.email}`,
     };
   }
+
+  /**
+   * POST /email/test/membresia-instrucciones
+   * Endpoint de prueba para enviar instrucciones de membresía
+   */
+  @Post('test/membresia-instrucciones')
+  @Public()
+  async testMembresiaInstrucciones(
+    @Body()
+    body: {
+      email: string;
+      nombreUsuario: string;
+    },
+  ) {
+    await this.emailService.enviarInstruccionesMembresia(
+      body.email,
+      body.nombreUsuario,
+    );
+
+    return {
+      success: true,
+      message: `Email de instrucciones de membresía enviado a ${body.email}`,
+    };
+  }
+
+  /**
+   * POST /email/test/membresia-confirmacion
+   * Endpoint de prueba para enviar confirmación de membresía
+   */
+  @Post('test/membresia-confirmacion')
+  @Public()
+  async testMembresiaConfirmacion(
+    @Body()
+    body: {
+      email: string;
+      nombreUsuario: string;
+    },
+  ) {
+    await this.emailService.enviarConfirmacionMembresia(
+      body.email,
+      body.nombreUsuario,
+    );
+
+    return {
+      success: true,
+      message: `Email de confirmación de membresía enviado a ${body.email}`,
+    };
+  }
 }

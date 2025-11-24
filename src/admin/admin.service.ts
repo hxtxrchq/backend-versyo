@@ -1,9 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class AdminService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminService.name);
+  
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   /**
    * Listar todos los productos (con paginación)
@@ -145,6 +151,15 @@ export class AdminService {
   async actualizarEstadoPedido(id: number, estado: string) {
     const pedido = await this.prisma.pedido.findUnique({
       where: { id },
+      include: {
+        usuario: true,
+        item_pedido: {
+          include: {
+            producto: true,
+            variacion: true,
+          },
+        },
+      },
     });
 
     if (!pedido) {
@@ -171,6 +186,39 @@ export class AdminService {
       data: { estado },
     });
 
+    // Enviar email según el nuevo estado
+    try {
+      if (estado === 'confirmado' && pedido.usuario?.email) {
+        this.logger.log(`Enviando correo de confirmación a ${pedido.usuario.email}`);
+        await this.emailService.enviarConfirmacionPedidoCliente({
+          pedidoId: pedido.id,
+          clienteEmail: pedido.usuario.email,
+          clienteNombre: pedido.usuario.nombre,
+          items: pedido.item_pedido.map(item => ({
+            producto: { nombre: item.producto.nombre },
+            cantidad: item.cantidad,
+            precio_unitario: Number(item.precio_unitario),
+            talla: item.variacion?.talla,
+            color: item.variacion?.color,
+          })),
+          total: Number(pedido.total),
+          direccion: `${pedido.direccion_envio}, ${pedido.ciudad}, ${pedido.region}`,
+        });
+      } else if (estado === 'enviado' && pedido.usuario?.email) {
+        this.logger.log(`Enviando correo de envío a ${pedido.usuario.email}`);
+        await this.emailService.enviarNotificacionEnvioCliente({
+          pedidoId: pedido.id,
+          clienteEmail: pedido.usuario.email,
+          clienteNombre: pedido.usuario.nombre,
+          tracking: pedido.codigo_tracking || 'Por asignar',
+          agenciaEnvio: pedido.agencia_envio || 'Por confirmar',
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Error al enviar email para pedido #${id}:`, error);
+      // No lanzar error para no bloquear la actualización del estado
+    }
+
     return this.obtenerPedido(id);
   }
 
@@ -184,6 +232,15 @@ export class AdminService {
   ) {
     const pedido = await this.prisma.pedido.findUnique({
       where: { id },
+      include: {
+        usuario: true,
+        item_pedido: {
+          include: {
+            producto: true,
+            variacion: true,
+          },
+        },
+      },
     });
 
     if (!pedido) {
@@ -198,6 +255,23 @@ export class AdminService {
         estado: 'enviado', // Auto-cambiar a enviado al agregar tracking
       },
     });
+
+    // Enviar email de envío con tracking
+    try {
+      if (pedido.usuario?.email) {
+        this.logger.log(`Enviando correo de envío con tracking a ${pedido.usuario.email}`);
+        await this.emailService.enviarNotificacionEnvioCliente({
+          pedidoId: pedido.id,
+          clienteEmail: pedido.usuario.email,
+          clienteNombre: pedido.usuario.nombre,
+          tracking: codigo_tracking,
+          agenciaEnvio: agencia_envio || 'Courier',
+        });
+      }
+    } catch (error) {
+      this.logger.error(`Error al enviar email de tracking para pedido #${id}:`, error);
+      // No lanzar error para no bloquear la actualización del tracking
+    }
 
     return this.obtenerPedido(id);
   }
@@ -255,6 +329,7 @@ export class AdminService {
     }));
 
     return {
+      id: pedido.id, // Alias para compatibilidad frontend
       pedido_id: pedido.id,
       usuario: pedido.usuario
         ? {
@@ -267,6 +342,8 @@ export class AdminService {
       total: Number(pedido.total),
       estado: pedido.estado,
       tracking: pedido.codigo_tracking,
+      numero_seguimiento: pedido.codigo_tracking, // Alias para compatibilidad
+      codigo_tracking: pedido.codigo_tracking,
       agencia_envio: pedido.agencia_envio,
       nombre_receptor: pedido.nombre_receptor,
       direccion_envio: pedido.direccion_envio,
@@ -275,6 +352,8 @@ export class AdminService {
       pais: pedido.pais,
       telefono_contacto: pedido.telefono_contacto,
       creado_en: pedido.creado_en,
+      voucher_url: pedido.pago_simulado?.[0]?.voucher_url,
+      metodo_pago: pedido.pago_simulado?.[0]?.metodo,
       items,
       pago: pedido.pago_simulado?.[0]
         ? {

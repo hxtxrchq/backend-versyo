@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Get,
+  Request,
 } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -14,6 +15,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from './decorators/public.decorator';
 
@@ -110,5 +112,31 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   logout(@Body('refreshToken') refreshToken: string) {
     return this.authService.logout(refreshToken);
+  }
+
+  /**
+   * POST /auth/send-verification-code
+   * Enviar código de verificación por email al usuario autenticado
+   * Rate limit: 3 intentos por minuto
+   */
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
+  @Post('send-verification-code')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  enviarCodigoVerificacion(@Request() req) {
+    return this.authService.enviarCodigoVerificacion(req.user.id);
+  }
+
+  /**
+   * POST /auth/verify-code
+   * Verificar cuenta con código de 6 dígitos
+   * Rate limit: 5 intentos por minuto
+   */
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Post('verify-code')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  verificarCodigo(@Request() req, @Body() data: VerifyEmailDto) {
+    return this.authService.verificarCodigo(req.user.id, data.codigo);
   }
 }

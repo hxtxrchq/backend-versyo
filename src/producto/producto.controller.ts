@@ -39,6 +39,7 @@ export class ProductoController {
     @Query('orden') orden?: string,
     @Query('pagina', new ParseIntPipe({ optional: true })) pagina?: number,
     @Query('limite', new ParseIntPipe({ optional: true })) limite?: number,
+    @Query('admin') admin?: string,
   ) {
     return this.productoService.listar({
       categoria,
@@ -49,7 +50,16 @@ export class ProductoController {
       orden,
       pagina,
       limite,
+      admin: admin === 'true',
     });
+  }
+
+  @Roles('admin', 'cliente')
+  @Get('destacados/list')
+  listarDestacados(
+    @Query('limite', new ParseIntPipe({ optional: true })) limite?: number,
+  ) {
+    return this.productoService.listarDestacados(limite);
   }
 
   @Roles('admin', 'cliente')
@@ -62,6 +72,24 @@ export class ProductoController {
   @Patch(':id')
   actualizar(@Param('id') id: string, @Body() data: ActualizarProductoDto) {
     return this.productoService.actualizar(Number(id), data);
+  }
+
+  @Roles('admin')
+  @Patch(':id/estado')
+  actualizarEstado(
+    @Param('id') id: string,
+    @Body('activo') activo: boolean,
+  ) {
+    return this.productoService.actualizarEstado(Number(id), activo);
+  }
+
+  @Roles('admin')
+  @Patch(':id/destacado')
+  actualizarDestacado(
+    @Param('id') id: string,
+    @Body('destacado') destacado: boolean,
+  ) {
+    return this.productoService.actualizarDestacado(Number(id), destacado);
   }
 
   @Roles('admin')

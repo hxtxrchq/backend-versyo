@@ -1,0 +1,8 @@
+# Archivo temporal - Reemplazar con el QR real de pago
+
+Este archivo es solo un placeholder. Por favor, reemplaza este archivo con tu código QR real de pago.
+
+El archivo debe:
+- Llamarse: qr-membresia.png
+- Ubicación: src/public/images/qr-membresia.png
+- Ser una imagen PNG del código QR para pagos de 60 soles

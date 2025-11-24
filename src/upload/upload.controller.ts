@@ -111,4 +111,21 @@ export class UploadController {
       throw new BadRequestException('Error al eliminar las imágenes');
     }
   }
+
+  /**
+   * POST /upload/voucher
+   * Subir comprobante de pago (público - no requiere autenticación)
+   */
+  @Post('voucher')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadVoucher(
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<{ url: string }> {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const url = await this.uploadService.uploadImage(file, 'versyo/vouchers');
+    return { url };
+  }
 }

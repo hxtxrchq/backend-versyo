@@ -1,6 +1,7 @@
-import { Controller, Get, Query, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Query, Param, ParseIntPipe, Post, Body } from '@nestjs/common';
 import { PublicoService } from './publico.service';
 import { Public } from '../auth/decorators/public.decorator';
+import { ContactoDto } from './dto/contacto.dto';
 
 @Controller('publico')
 @Public() // Todo el controlador es público
@@ -112,5 +113,14 @@ export class PublicoController {
   @Get('productos/:id/variaciones')
   async obtenerVariaciones(@Param('id', ParseIntPipe) id: number) {
     return this.publicoService.obtenerVariaciones(id);
+  }
+
+  /**
+   * POST /publico/contacto
+   * Enviar mensaje de contacto
+   */
+  @Post('contacto')
+  async enviarContacto(@Body() data: ContactoDto) {
+    return this.publicoService.enviarContacto(data);
   }
 }

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CrearProductoDto } from './dto/crear-producto.dto';
 import { ActualizarProductoDto } from './dto/actualizar-producto.dto';
 import { createSlug } from './utils/slug.util';
+import { generarSKU } from './utils/sku-generator';
 
 @Injectable()
 export class ProductoService {
@@ -28,7 +29,8 @@ export class ProductoService {
     // Generar slug único basado en el nombre
     const slug = await this.generarSlugUnico(data.nombre);
 
-    return this.prisma.producto.create({
+    // Crear producto con variaciones si las tiene
+    const producto = await this.prisma.producto.create({
       data: {
         nombre: data.nombre,
         descripcion: data.descripcion,
@@ -36,20 +38,59 @@ export class ProductoService {
         imagenes: data.imagenes,
         categoria_id: data.categoria_id,
         temporada_id: data.temporada_id,
-        slug, // Slug generado automáticamente
+        genero: data.genero || 'ambos',
+        slug,
+        // Si tiene variaciones, crearlas con SKU auto-generado si no se proporciona
+        ...(data.tiene_variaciones && data.variaciones?.length
+          ? {
+              variaciones: {
+                create: data.variaciones.map((v) => ({
+                  talla: v.talla,
+                  color: v.color,
+                  codigo_color: v.codigo_color,
+                  imagen_url: v.imagen_url,
+                  stock: v.stock,
+                  sku: v.sku || 'TEMP', // Temporal, se actualizará después
+                })),
+              },
+            }
+          : {}),
+      },
+      include: {
+        variaciones: true,
+        categoria: true,
+        temporada: true,
       },
     });
+
+    // Actualizar SKUs de variaciones con el ID del producto si no se proporcionaron
+    if (data.tiene_variaciones && data.variaciones?.length && producto.variaciones?.length) {
+      for (const variacion of producto.variaciones) {
+        if (variacion.sku === 'TEMP') {
+          const nuevoSKU = generarSKU(producto.id, variacion.color, variacion.talla);
+          await this.prisma.variacion_producto.update({
+            where: { id: variacion.id },
+            data: { sku: nuevoSKU },
+          });
+          variacion.sku = nuevoSKU; // Actualizar en el objeto retornado
+        }
+      }
+    }
+
+    return producto;
   }
 
   async listar(filtros?: {
     categoria?: number;
     temporada?: number;
+    genero?: string;
     precio_min?: number;
     precio_max?: number;
     buscar?: string;
     orden?: string;
     pagina?: number;
     limite?: number;
+    admin?: boolean;
   }) {
     const pagina = filtros?.pagina || 1;
     const limite = filtros?.limite || 20;
@@ -58,12 +99,24 @@ export class ProductoService {
     // Construir WHERE dinámico
     const where: any = {};
 
+    // Filtrar solo productos activos si no es admin
+    if (!filtros?.admin) {
+      where.activo = true;
+    }
+
     if (filtros?.categoria) {
       where.categoria_id = filtros.categoria;
     }
 
     if (filtros?.temporada) {
       where.temporada_id = filtros.temporada;
+    }
+
+    // Filtro por género: si es 'hombre' o 'mujer', incluir también 'ambos'
+    if (filtros?.genero && filtros.genero !== 'ambos') {
+      where.genero = { in: [filtros.genero, 'ambos'] };
+    } else if (filtros?.genero === 'ambos') {
+      where.genero = 'ambos';
     }
 
     if (filtros?.precio_min || filtros?.precio_max) {
@@ -159,7 +212,10 @@ export class ProductoService {
   }
 
   async actualizar(id: number, data: ActualizarProductoDto) {
-    const producto = await this.prisma.producto.findUnique({ where: { id } });
+    const producto = await this.prisma.producto.findUnique({ 
+      where: { id },
+      include: { variaciones: true }
+    });
     if (!producto) throw new NotFoundException('El producto no existe');
 
     // Si se actualiza el nombre, regenerar el slug
@@ -168,11 +224,62 @@ export class ProductoService {
       slug = await this.generarSlugUnico(data.nombre, id);
     }
 
+    // Preparar datos de actualización (solo incluir campos que vienen en data)
+    const updateData: any = {};
+    
+    if (data.nombre !== undefined) updateData.nombre = data.nombre;
+    if (data.descripcion !== undefined) updateData.descripcion = data.descripcion;
+    if (data.precio !== undefined) updateData.precio = data.precio;
+    if (data.imagenes !== undefined) updateData.imagenes = data.imagenes;
+    if (data.genero !== undefined) updateData.genero = data.genero;
+    // Nota: tiene_variaciones no existe en el schema, se determina por la existencia de variaciones
+    if (slug) updateData.slug = slug;
+
+    // Manejar relaciones con connect/disconnect
+    if (data.categoria_id !== undefined) {
+      updateData.categoria = data.categoria_id 
+        ? { connect: { id: data.categoria_id } }
+        : { disconnect: true };
+    }
+
+    if (data.temporada_id !== undefined) {
+      updateData.temporada = data.temporada_id
+        ? { connect: { id: data.temporada_id } }
+        : { disconnect: true };
+    }
+
+    // Si tiene variaciones, eliminar las existentes y crear las nuevas
+    if (data.tiene_variaciones && data.variaciones?.length) {
+      // Eliminar variaciones existentes
+      await this.prisma.variacion_producto.deleteMany({
+        where: { producto_id: id },
+      });
+
+      // Crear las nuevas variaciones
+      updateData.variaciones = {
+        create: data.variaciones.map((v) => ({
+          talla: v.talla,
+          color: v.color,
+          codigo_color: v.codigo_color,
+          imagen_url: v.imagen_url,
+          stock: v.stock,
+          sku: v.sku || generarSKU(id, v.color, v.talla),
+        })),
+      };
+    } else if (!data.tiene_variaciones) {
+      // Si ya no tiene variaciones, eliminar todas
+      await this.prisma.variacion_producto.deleteMany({
+        where: { producto_id: id },
+      });
+    }
+
     return this.prisma.producto.update({
       where: { id },
-      data: {
-        ...data,
-        ...(slug && { slug }), // Solo actualizar slug si se generó uno nuevo
+      data: updateData,
+      include: {
+        variaciones: true,
+        categoria: true,
+        temporada: true,
       },
     });
   }
@@ -238,6 +345,8 @@ export class ProductoService {
       categoria,
       temporada,
       variaciones,
+      activo,
+      destacado,
     } = producto;
 
     // Calcular stock_total sumando el stock de todas las variaciones
@@ -257,6 +366,8 @@ export class ProductoService {
     if (imagenes) productoTransformado.imagenes = imagenes;
     if (slug) productoTransformado.slug = slug;
     if (creado_en) productoTransformado.creado_en = creado_en;
+    if (activo !== undefined) productoTransformado.activo = activo;
+    if (destacado !== undefined) productoTransformado.destacado = destacado;
 
     // Incluir relaciones
     if (categoria) productoTransformado.categoria = categoria;
@@ -271,11 +382,77 @@ export class ProductoService {
         id: v.id,
         talla: v.talla,
         color: v.color,
+        codigo_color: v.codigo_color,
+        imagen_url: v.imagen_url,
         stock: v.stock,
         sku: v.sku,
       }));
     }
 
     return productoTransformado;
+  }
+
+  async listarDestacados(limite: number = 12) {
+    const productos = await this.prisma.producto.findMany({
+      where: {
+        activo: true,
+        destacado: true,
+      },
+      take: limite,
+      orderBy: { creado_en: 'desc' },
+      include: {
+        categoria: true,
+        temporada: true,
+        variaciones: {
+          orderBy: [{ talla: 'asc' }, { color: 'asc' }],
+        },
+      },
+    });
+
+    return productos.map((producto) => this.transformarProducto(producto));
+  }
+
+  async actualizarEstado(id: number, activo: boolean) {
+    const producto = await this.prisma.producto.findUnique({
+      where: { id },
+    });
+
+    if (!producto) {
+      throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+    }
+
+    const productoActualizado = await this.prisma.producto.update({
+      where: { id },
+      data: { activo },
+      include: {
+        categoria: true,
+        temporada: true,
+        variaciones: true,
+      },
+    });
+
+    return this.transformarProducto(productoActualizado);
+  }
+
+  async actualizarDestacado(id: number, destacado: boolean) {
+    const producto = await this.prisma.producto.findUnique({
+      where: { id },
+    });
+
+    if (!producto) {
+      throw new NotFoundException(`Producto con ID ${id} no encontrado`);
+    }
+
+    const productoActualizado = await this.prisma.producto.update({
+      where: { id },
+      data: { destacado },
+      include: {
+        categoria: true,
+        temporada: true,
+        variaciones: true,
+      },
+    });
+
+    return this.transformarProducto(productoActualizado);
   }
 }

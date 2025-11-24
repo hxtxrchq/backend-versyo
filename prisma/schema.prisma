@@ -2,6 +2,8 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Configuración válida para Prisma 6.x
+// La extensión VS Code puede mostrar warning de Prisma 7, pero es falso positivo
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -105,6 +107,9 @@ model pedido {
   agencia_envio           String?         @db.VarChar(100)
   tiempo_estimado_entrega String?         @db.VarChar(100)
   cupon_id                Int?
+  metodo_pago             String?         @db.VarChar(50)
+  voucher_url             String?         @db.VarChar(500)
+  notas                   String?
   creado_en               DateTime?       @default(now()) @db.Timestamptz(6)
   item_pedido             item_pedido[]
   pago_simulado           pago_simulado[]
@@ -125,7 +130,10 @@ model producto {
   imagenes     Json?
   categoria_id Int?
   temporada_id Int?
+  genero       String?              @default("ambos") @db.VarChar(20)
   slug         String?              @unique @db.VarChar(200)
+  activo       Boolean              @default(true)
+  destacado    Boolean              @default(false)
   creado_en    DateTime?            @default(now()) @db.Timestamptz(6)
   item_carrito item_carrito[]
   item_pedido  item_pedido[]
@@ -136,16 +144,21 @@ model producto {
 
   @@index([categoria_id])
   @@index([temporada_id])
+  @@index([genero])
+  @@index([activo])
+  @@index([destacado])
   @@index([creado_en])
 }
 
 model variacion_producto {
   id           Int            @id @default(autoincrement())
   producto_id  Int
-  talla        String?
-  color        String?
+  talla        String?        @db.VarChar(20)
+  color        String?        @db.VarChar(50)
+  codigo_color String?        @db.VarChar(7)
+  imagen_url   String?        @db.VarChar(500)
   stock        Int?           @default(0)
-  sku          String?
+  sku          String?        @db.VarChar(100)
   item_carrito item_carrito[]
   item_pedido  item_pedido[]
   producto     producto       @relation(fields: [producto_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -167,13 +180,18 @@ model temporada {
 model usuario {
   id                        Int                         @id @default(autoincrement())
   nombre                    String                      @db.VarChar(150)
+  apellido                  String?                     @db.VarChar(150)
   email                     String                      @unique @db.VarChar(200)
   contrasena                String                      @db.VarChar(255)
   dni                       String?                     @unique @db.VarChar(20)
   direccion                 String?                     @db.VarChar(255)
   email_verificado          Boolean                     @default(false)
+  codigo_verificacion       String?                     @db.VarChar(10)
+  codigo_verificacion_exp   DateTime?                   @db.Timestamptz(6)
   rol                       String                      @default("cliente") @db.VarChar(20)
   telefono                  String?                     @db.VarChar(50)
+  tiene_membresia           Boolean                     @default(false)
+  fecha_membresia           DateTime?                   @db.Timestamptz(6)
   creado_en                 DateTime                    @default(now()) @db.Timestamptz(6)
   carrito                   carrito[]
   pedido                    pedido[]
@@ -181,10 +199,28 @@ model usuario {
   email_verification_tokens email_verification_token[]
   password_reset_tokens     password_reset_token[]
   refresh_tokens            refresh_token[]
+  solicitudes_membresia     solicitud_membresia[]
 
   @@index([email])
   @@index([dni])
   @@index([rol])
+  @@index([tiene_membresia])
+}
+
+model solicitud_membresia {
+  id                  Int       @id @default(autoincrement())
+  usuario_id          Int
+  email_solicitante   String    @db.VarChar(200)
+  estado              String    @default("pendiente") @db.VarChar(30)
+  boleta_url          String?   @db.VarChar(500)
+  comprobante_enviado Boolean   @default(false)
+  creado_en           DateTime  @default(now()) @db.Timestamptz(6)
+  procesado_en        DateTime? @db.Timestamptz(6)
+  usuario             usuario   @relation(fields: [usuario_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([usuario_id])
+  @@index([estado])
+  @@index([email_solicitante])
 }
 
 model wishlist {

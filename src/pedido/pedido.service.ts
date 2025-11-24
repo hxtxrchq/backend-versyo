@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -13,64 +14,81 @@ import { ActualizarTrackingPedidoDto } from './dto/actualizar-tracking-pedido.dt
 
 @Injectable()
 export class PedidoService {
+  private readonly logger = new Logger(PedidoService.name);
+
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
   ) {}
 
   /**
-   * Crear un pedido desde el carrito del usuario (CHECKOUT)
+   * Crear un pedido desde items directos (CHECKOUT)
    * - Valida stock de variaciones
    * - Valida y aplica cupón (opcional)
    * - Descuenta stock
    * - Crea pedido, items y pago simulado
-   * - Limpia el carrito
    */
   async checkout(usuarioId: number, data: CrearPedidoDto) {
-    // 1. Obtener carrito activo del usuario con items
-    const carrito = await this.prisma.carrito.findFirst({
-      where: {
-        usuario_id: usuarioId,
-        estado: 'activo',
-      },
-      include: {
-        item_carrito: {
-          include: {
-            producto: true,
-            variacion: true,
-          },
-        },
-      },
-    });
-
-    if (!carrito) {
-      throw new NotFoundException('No se encontró un carrito activo');
+    // 1. Validar que hay items
+    if (!data.items || data.items.length === 0) {
+      throw new BadRequestException('No hay items en el pedido');
     }
 
-    if (!carrito.item_carrito || carrito.item_carrito.length === 0) {
-      throw new BadRequestException('El carrito está vacío');
-    }
+    // 2. Validar stock de cada variación y obtener datos de productos
+    const itemsConDatos: Array<{
+      productoId: number;
+      variacionId: number;
+      cantidad: number;
+      precioUnitario: number;
+      producto: any;
+      variacion: any;
+    }> = [];
+    
+    for (const item of data.items) {
+      // Validar que el item tiene variación (requerido por el schema)
+      if (!item.variacionId) {
+        throw new BadRequestException('Todos los productos deben tener una variación seleccionada');
+      }
 
-    // 2. Validar stock de cada variación
-    for (const item of carrito.item_carrito) {
-      if (!item.variacion) {
+      const producto = await this.prisma.producto.findUnique({
+        where: { id: item.productoId },
+      });
+
+      if (!producto) {
+        throw new NotFoundException(`Producto con ID ${item.productoId} no encontrado`);
+      }
+
+      const variacion = await this.prisma.variacion_producto.findUnique({
+        where: { id: item.variacionId },
+      });
+
+      if (!variacion) {
         throw new NotFoundException(
-          `Variación con ID ${item.variacion_id} no encontrada`,
+          `Variación con ID ${item.variacionId} no encontrada`,
         );
       }
 
-      const stockDisponible = item.variacion.stock || 0;
+      const stockDisponible = variacion.stock || 0;
       if (stockDisponible < item.cantidad) {
         throw new ConflictException(
-          `Stock insuficiente para ${item.producto?.nombre} - ${item.variacion.talla} ${item.variacion.color}. ` +
+          `Stock insuficiente para ${producto.nombre} - ${variacion.talla} ${variacion.color}. ` +
             `Disponible: ${stockDisponible}, Solicitado: ${item.cantidad}`,
         );
       }
+
+      itemsConDatos.push({ 
+        productoId: item.productoId,
+        variacionId: item.variacionId,
+        cantidad: item.cantidad,
+        precioUnitario: item.precioUnitario,
+        producto, 
+        variacion 
+      });
     }
 
     // 3. Calcular subtotal
-    const subtotal = carrito.item_carrito.reduce(
-      (sum, item) => sum + Number(item.precio_unitario) * item.cantidad,
+    const subtotal = data.items.reduce(
+      (sum, item) => sum + Number(item.precioUnitario) * item.cantidad,
       0,
     );
 
@@ -129,7 +147,9 @@ export class PedidoService {
       descuento = Math.min(descuento, subtotal);
     }
 
-    const total = subtotal - descuento;
+    // Calcular costo de envío (Trujillo = 7, otros = 20, vacío = 0)
+    const costoEnvio = data.costo_envio || 0;
+    const total = subtotal - descuento + costoEnvio;
 
     // 5. Crear pedido, items y pago en una transacción SEGURA
     const resultado = await this.prisma.$transaction(async (prisma) => {
@@ -146,19 +166,22 @@ export class PedidoService {
           pais: data.pais,
           telefono_contacto: data.telefono_contacto,
           cupon_id: cupon?.id,
+          metodo_pago: data.metodo_pago,
+          voucher_url: data.voucher_url,
+          notas: data.notas,
         },
       });
 
       // Crear items del pedido y descontar stock ATÓMICAMENTE
-      for (const item of carrito.item_carrito) {
+      for (const itemData of itemsConDatos) {
         // Crear item_pedido
         await prisma.item_pedido.create({
           data: {
             pedido_id: pedido.id,
-            producto_id: item.producto_id,
-            variacion_id: item.variacion_id,
-            cantidad: item.cantidad,
-            precio_unitario: item.precio_unitario,
+            producto_id: itemData.productoId,
+            variacion_id: itemData.variacionId,
+            cantidad: itemData.cantidad,
+            precio_unitario: itemData.precioUnitario,
           },
         });
 
@@ -166,15 +189,15 @@ export class PedidoService {
         // Esto previene race conditions y stock negativo
         const resultado = await prisma.$executeRaw`
           UPDATE variacion_producto
-          SET stock = stock - ${item.cantidad}
-          WHERE id = ${item.variacion_id}
-          AND stock >= ${item.cantidad}
+          SET stock = stock - ${itemData.cantidad}
+          WHERE id = ${itemData.variacionId}
+          AND stock >= ${itemData.cantidad}
         `;
 
         // Si no se actualizó ninguna fila, significa que no hay stock suficiente
         if (resultado === 0) {
           throw new ConflictException(
-            `Stock insuficiente para ${item.producto?.nombre} - ${item.variacion?.talla} ${item.variacion?.color}. ` +
+            `Stock insuficiente para ${itemData.producto?.nombre} - ${itemData.variacion?.talla} ${itemData.variacion?.color}. ` +
               `Otro usuario puede haber comprado el último stock disponible.`,
           );
         }
@@ -197,16 +220,37 @@ export class PedidoService {
         },
       });
 
-      // Limpiar items del carrito
-      await prisma.item_carrito.deleteMany({
-        where: { carrito_id: carrito.id },
-      });
-
       return { pedido, pago };
     });
 
     // 6. Obtener pedido completo con relaciones para la respuesta
-    return this.obtenerPedidoCompleto(resultado.pedido.id);
+    const pedidoCompleto = await this.obtenerPedidoCompleto(resultado.pedido.id);
+
+    // 7. Enviar notificación por email (no bloquea la respuesta)
+    try {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { nombre: true, apellido: true, email: true },
+      });
+
+      await this.emailService.enviarNotificacionNuevoPedido({
+        pedidoId: resultado.pedido.id,
+        clienteNombre: `${usuario?.nombre || data.nombre_receptor} ${usuario?.apellido || ''}`.trim(),
+        clienteEmail: usuario?.email || '',
+        total: Number(resultado.pedido.total),
+        items: pedidoCompleto.items,
+        direccion: data.direccion_envio,
+        telefono: data.telefono_contacto,
+        metodoPago: data.metodo_pago || 'No especificado',
+        voucherUrl: data.voucher_url,
+        notas: data.notas,
+      });
+    } catch (emailError) {
+      this.logger.error('Error al enviar email de notificación:', emailError);
+      // No afecta la respuesta del pedido
+    }
+
+    return pedidoCompleto;
   }
 
   /**
@@ -271,8 +315,16 @@ export class PedidoService {
       include: {
         usuario: {
           select: {
+            id: true,
             nombre: true,
+            apellido: true,
             email: true,
+          },
+        },
+        item_pedido: {
+          include: {
+            producto: true,
+            variacion: true,
           },
         },
       },
@@ -282,18 +334,35 @@ export class PedidoService {
       throw new NotFoundException('Pedido no encontrado');
     }
 
+    const estadoAnterior = pedido.estado;
+
     await this.prisma.pedido.update({
       where: { id },
       data: { estado: data.estado },
     });
 
-    // Enviar email de confirmación si el pedido es confirmado
-    if (data.estado === 'confirmado') {
-      await this.emailService.enviarConfirmacionPedido(
-        pedido.usuario.email,
-        pedido.usuario.nombre,
-        pedido.id.toString(),
-      );
+    // Enviar email de confirmación si el pedido cambia a confirmado
+    if (data.estado === 'confirmado' && estadoAnterior !== 'confirmado') {
+      try {
+        const items = pedido.item_pedido.map((item: any) => ({
+          producto: { nombre: item.producto?.nombre },
+          talla: item.variacion?.talla,
+          color: item.variacion?.color,
+          cantidad: item.cantidad,
+          precio_unitario: item.precio_unitario,
+        }));
+
+        await this.emailService.enviarConfirmacionPedidoCliente({
+          pedidoId: pedido.id,
+          clienteNombre: `${pedido.usuario?.nombre || ''} ${pedido.usuario?.apellido || ''}`.trim(),
+          clienteEmail: pedido.usuario?.email || '',
+          total: Number(pedido.total),
+          items,
+          direccion: pedido.direccion_envio || '',
+        });
+      } catch (emailError) {
+        this.logger.error('Error al enviar email de confirmación:', emailError);
+      }
     }
 
     return this.obtenerPorId(id);
@@ -310,6 +379,7 @@ export class PedidoService {
         usuario: {
           select: {
             nombre: true,
+            apellido: true,
             email: true,
           },
         },
@@ -331,13 +401,17 @@ export class PedidoService {
     });
 
     // Enviar email de notificación de envío
-    await this.emailService.enviarNotificacionEnvio(
-      pedido.usuario.email,
-      pedido.usuario.nombre,
-      pedido.id.toString(),
-      data.agencia_envio || 'No especificada',
-      data.codigo_tracking || 'No disponible',
-    );
+    try {
+      await this.emailService.enviarNotificacionEnvioCliente({
+        pedidoId: pedido.id,
+        clienteNombre: `${pedido.usuario?.nombre || ''} ${pedido.usuario?.apellido || ''}`.trim(),
+        clienteEmail: pedido.usuario?.email || '',
+        tracking: data.codigo_tracking || 'No disponible',
+        agenciaEnvio: data.agencia_envio,
+      });
+    } catch (emailError) {
+      this.logger.error('Error al enviar email de tracking:', emailError);
+    }
 
     return this.obtenerPorId(id);
   }
@@ -410,6 +484,14 @@ export class PedidoService {
     const pedido = await this.prisma.pedido.findUnique({
       where: { id },
       include: {
+        usuario: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            email: true,
+          },
+        },
         item_pedido: {
           include: {
             producto: true,
@@ -432,16 +514,25 @@ export class PedidoService {
    */
   private transformarPedido(pedido: any) {
     const items = pedido.item_pedido.map((item: any) => ({
+      id: item.id,
       producto_id: item.producto_id,
       nombre: item.producto?.nombre,
       precio_unitario: Number(item.precio_unitario),
       cantidad: item.cantidad,
+      producto: {
+        id: item.producto?.id,
+        nombre: item.producto?.nombre,
+        imagenes: item.producto?.imagenes || [],
+        precio: Number(item.producto?.precio || 0),
+      },
       variacion: {
         id: item.variacion?.id,
         talla: item.variacion?.talla,
         color: item.variacion?.color,
         sku: item.variacion?.sku,
       },
+      color: item.variacion?.color,
+      talla: item.variacion?.talla,
       subtotal: Number(item.precio_unitario) * item.cantidad,
     }));
 
@@ -455,20 +546,35 @@ export class PedidoService {
       : null;
 
     return {
+      id: pedido.id,
       pedido_id: pedido.id,
       usuario_id: pedido.usuario_id,
       total: Number(pedido.total),
       estado: pedido.estado,
+      numero_seguimiento: pedido.codigo_tracking,
       tracking: pedido.codigo_tracking,
       agencia_envio: pedido.agencia_envio,
       tiempo_estimado_entrega: pedido.tiempo_estimado_entrega,
       nombre_receptor: pedido.nombre_receptor,
+      direccionEnvio: pedido.direccion_envio,
       direccion_envio: pedido.direccion_envio,
       ciudad: pedido.ciudad,
       region: pedido.region,
       pais: pedido.pais,
+      telefono: pedido.telefono_contacto,
       telefono_contacto: pedido.telefono_contacto,
+      metodoPago: pedido.metodo_pago,
+      metodo_pago: pedido.metodo_pago,
+      voucher_url: pedido.voucher_url,
+      notas: pedido.notas,
+      createdAt: pedido.creado_en,
       creado_en: pedido.creado_en,
+      usuario: pedido.usuario ? {
+        id: pedido.usuario.id,
+        nombre: pedido.usuario.nombre,
+        apellido: pedido.usuario.apellido,
+        email: pedido.usuario.email,
+      } : null,
       items,
       pago,
     };

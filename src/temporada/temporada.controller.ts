@@ -16,36 +16,36 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('temporadas')
-@UseGuards(JwtAuthGuard, RolesGuard)
 export class TemporadaController {
   constructor(private readonly temporadaService: TemporadaService) {}
 
-  @Roles('admin')
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   crear(@Body() data: CrearTemporadaDto) {
     return this.temporadaService.crear(data);
   }
 
-  @Roles('admin', 'cliente')
   @Get()
   listar() {
     return this.temporadaService.listar();
   }
 
-  @Roles('admin', 'cliente')
   @Get(':id')
   buscarPorId(@Param('id') id: string) {
     return this.temporadaService.buscarPorId(Number(id));
   }
 
-  @Roles('admin')
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   actualizar(@Param('id') id: string, @Body() data: ActualizarTemporadaDto) {
     return this.temporadaService.actualizar(Number(id), data);
   }
 
-  @Roles('admin')
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   eliminar(@Param('id') id: string) {
     return this.temporadaService.eliminar(Number(id));
   }

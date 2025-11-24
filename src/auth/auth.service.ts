@@ -343,4 +343,95 @@ export class AuthService {
 
     return { mensaje: 'Sesión cerrada correctamente' };
   }
+
+  /**
+   * Enviar código de verificación de 6 dígitos por email
+   */
+  async enviarCodigoVerificacion(usuarioId: number) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+    });
+
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (usuario.email_verificado) {
+      throw new BadRequestException('El email ya está verificado');
+    }
+
+    // Generar código de 6 dígitos
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiraEn = new Date();
+    expiraEn.setMinutes(expiraEn.getMinutes() + 15); // Expira en 15 minutos
+
+    // Guardar código en la base de datos
+    await this.prisma.usuario.update({
+      where: { id: usuarioId },
+      data: {
+        codigo_verificacion: codigo,
+        codigo_verificacion_exp: expiraEn,
+      },
+    });
+
+    // Enviar email con el código
+    await this.emailService.enviarCodigoVerificacion(
+      usuario.email,
+      usuario.nombre,
+      codigo,
+    );
+
+    return {
+      mensaje: 'Código de verificación enviado a tu email',
+      expiraEn: expiraEn.toISOString(),
+    };
+  }
+
+  /**
+   * Verificar código de 6 dígitos
+   */
+  async verificarCodigo(usuarioId: number, codigo: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+    });
+
+    if (!usuario) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    if (usuario.email_verificado) {
+      throw new BadRequestException('El email ya está verificado');
+    }
+
+    if (!usuario.codigo_verificacion || !usuario.codigo_verificacion_exp) {
+      throw new BadRequestException(
+        'No hay código de verificación. Solicita uno nuevo.',
+      );
+    }
+
+    if (new Date() > usuario.codigo_verificacion_exp) {
+      throw new BadRequestException(
+        'El código ha expirado. Solicita uno nuevo.',
+      );
+    }
+
+    if (usuario.codigo_verificacion !== codigo) {
+      throw new BadRequestException('Código incorrecto');
+    }
+
+    // Marcar email como verificado y limpiar código
+    await this.prisma.usuario.update({
+      where: { id: usuarioId },
+      data: {
+        email_verificado: true,
+        codigo_verificacion: null,
+        codigo_verificacion_exp: null,
+      },
+    });
+
+    return {
+      mensaje: 'Email verificado correctamente',
+      email_verificado: true,
+    };
+  }
 }
