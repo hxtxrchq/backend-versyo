@@ -12,13 +12,16 @@ export class EmailService {
   private readonly isConfigured: boolean;
 
   constructor() {
-    const gmailUser = process.env.GMAIL_USER;
-    const gmailPassword = process.env.GMAIL_APP_PASSWORD;
+    const gmailUser = process.env.GMAIL_USER?.trim();
+    const gmailPassword = process.env.GMAIL_APP_PASSWORD?.trim();
 
-    this.isConfigured = !!(gmailUser && gmailPassword);
+    // Validar que ambas variables existan Y tengan contenido
+    this.isConfigured = !!(gmailUser && gmailPassword && gmailUser.length > 0 && gmailPassword.length > 0);
 
     if (!this.isConfigured) {
-      this.logger.warn('⚠️ GMAIL_USER o GMAIL_APP_PASSWORD no configurados. Los emails no se enviarán (modo desarrollo).');
+      this.logger.warn('⚠️ GMAIL_USER o GMAIL_APP_PASSWORD no configurados correctamente. Los emails no se enviarán (modo desarrollo).');
+      this.logger.warn(`   GMAIL_USER: ${gmailUser ? '✓ presente' : '✗ vacío'}`);
+      this.logger.warn(`   GMAIL_APP_PASSWORD: ${gmailPassword ? '✓ presente' : '✗ vacío'}`);
       // Crear un transporter "dummy" que no falla pero tampoco envía
       this.transporter = nodemailer.createTransport({
         streamTransport: true,
@@ -33,7 +36,7 @@ export class EmailService {
           pass: gmailPassword,
         },
       });
-      this.logger.log('✅ Email service configurado correctamente');
+      this.logger.log('✅ Email service configurado correctamente con Gmail SMTP');
     }
   }
 
