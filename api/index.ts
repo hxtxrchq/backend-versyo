@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
+import { AppModule } from '../src/app.module';
 
 export default async function handler(req, res) {
   const app = await NestFactory.create(AppModule);
