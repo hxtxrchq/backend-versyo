@@ -315,22 +315,36 @@ export class AdminService {
    */
   private transformarPedido(pedido: any) {
     const items = pedido.item_pedido.map((item: any) => ({
+      id: item.id,
+      pedido_id: item.pedido_id,
       producto_id: item.producto_id,
+      variacion_id: item.variacion_id,
       nombre: item.producto?.nombre,
+      nombre_producto: item.producto?.nombre, // Alias para frontend
       precio_unitario: Number(item.precio_unitario),
+      precioUnitario: Number(item.precio_unitario), // Alias para frontend
       cantidad: item.cantidad,
-      variacion: {
-        id: item.variacion?.id,
-        talla: item.variacion?.talla,
-        color: item.variacion?.color,
-        sku: item.variacion?.sku,
-      },
+      color: item.variacion?.color,
+      talla: item.variacion?.talla,
       subtotal: Number(item.precio_unitario) * item.cantidad,
+      producto: item.producto ? {
+        id: item.producto.id,
+        nombre: item.producto.nombre,
+        imagen_principal: item.producto.imagen_principal,
+        precio: Number(item.producto.precio),
+      } : null,
+      variacion: item.variacion ? {
+        id: item.variacion.id,
+        talla: item.variacion.talla,
+        color: item.variacion.color,
+        sku: item.variacion.sku,
+      } : null,
     }));
 
     return {
       id: pedido.id, // Alias para compatibilidad frontend
       pedido_id: pedido.id,
+      usuario_id: pedido.usuario_id,
       usuario: pedido.usuario
         ? {
             id: pedido.usuario.id,
@@ -340,17 +354,26 @@ export class AdminService {
           }
         : null,
       total: Number(pedido.total),
+      subtotal: Number(pedido.subtotal || 0),
+      descuento: Number(pedido.descuento || 0),
+      envio: Number(pedido.envio || 0),
       estado: pedido.estado,
       tracking: pedido.codigo_tracking,
       numero_seguimiento: pedido.codigo_tracking, // Alias para compatibilidad
       codigo_tracking: pedido.codigo_tracking,
       agencia_envio: pedido.agencia_envio,
       nombre_receptor: pedido.nombre_receptor,
+      nombre_completo: pedido.nombre_receptor, // Alias para frontend
       direccion_envio: pedido.direccion_envio,
+      direccion: pedido.direccion_envio, // Alias para frontend
       ciudad: pedido.ciudad,
       region: pedido.region,
       pais: pedido.pais,
+      codigo_postal: pedido.codigo_postal,
       telefono_contacto: pedido.telefono_contacto,
+      telefono: pedido.telefono_contacto, // Alias para frontend
+      email: pedido.usuario?.email || '', // Email del usuario
+      notas: pedido.notas,
       creado_en: pedido.creado_en,
       voucher_url: pedido.pago_simulado?.[0]?.voucher_url,
       metodo_pago: pedido.pago_simulado?.[0]?.metodo,

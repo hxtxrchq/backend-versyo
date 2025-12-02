@@ -18,6 +18,7 @@ import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
 import { EmailModule } from './email/email.module';
 import { MembresiaModule } from './membresia/membresia.module';
+import { WebhookModule } from './webhook/webhook.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { MembresiaModule } from './membresia/membresia.module';
     AdminModule,
     EmailModule,
     MembresiaModule,
+    WebhookModule,
   ],
   controllers: [AppController],
   providers: [
