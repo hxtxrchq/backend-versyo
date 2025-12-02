@@ -11,6 +11,7 @@ async function bootstrap() {
       process.env.FRONTEND_URL || 'http://localhost:3000',
       'https://versyo.chiqo.site',
       'http://localhost:5173', // Vite dev server
+      /\.vercel\.app$/, // Permite cualquier dominio de Vercel
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -31,7 +32,7 @@ async function bootstrap() {
 
   // Puerto del servidor
   const port = process.env.PORT || 3001;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0'); // Necesario para Vercel
 
   console.log(`
 ╔═══════════════════════════════════════════════════╗
